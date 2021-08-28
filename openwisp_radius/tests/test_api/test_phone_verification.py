@@ -8,7 +8,7 @@ from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.authtoken.models import Token
 
-from openwisp_utils.tests import capture_any_output, capture_stderr
+from openwisp_utils.tests import capture_any_output, capture_stderr, capture_stdout
 
 from ... import settings as app_settings
 from ...utils import load_model
@@ -40,8 +40,10 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         'method': 'mobile_phone',
     }
 
-    def _register_user(self):
-        return super()._register_user(extra_params=self._extra_registration_params)
+    def _register_user(self, **kwargs):
+        return super()._register_user(
+            extra_params=self._extra_registration_params, **kwargs
+        )
 
     def test_register_201_mobile_phone_verification(self):
         r = self._register_user()
@@ -90,6 +92,14 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn('phone_number', r.data)
         self.assertEqual(User.objects.count(), 2)
+
+    def test_register_400_duplicate_user(self):
+        self.test_register_201_mobile_phone_verification()
+        r = self._register_user(expect_201=False, expect_users=None)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('username', r.data)
+        self.assertIn('email', r.data)
+        self.assertIn('phone_number', r.data)
 
     def test_create_phone_token_401(self):
         url = reverse('radius:phone_token_create', args=[self.default_org.slug])
@@ -343,7 +353,6 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         self.assertEqual(phone_token_qs.count(), 2)
         user.refresh_from_db()
         self.assertTrue(user.is_active)
-        self.assertEqual(user.phone_number, user.phone_number)
 
         with self.subTest('user is flagged as unverified'):
             self.assertFalse(user.registered_user.is_verified)
@@ -690,6 +699,45 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         # occurred during phone token creation.
         self.assertTrue(user.is_active)
         self.assertTrue(user.registered_user.is_verified)
+
+    @capture_stdout()
+    def test_phone_number_change_update_username(self):
+        self.test_create_phone_token_201()
+        user = User.objects.get(email=self._test_email)
+
+        # Mock verified user has registered with only phone_number
+        user.username = user.phone_number
+        user.save()
+        user.registered_user.is_verified = True
+        user.registered_user.save()
+        PhoneToken.objects.all().delete()
+
+        # Update phone_number
+        user_token = Token.objects.filter(user=user).last()
+        url = reverse('radius:phone_number_change', args=[self.default_org.slug])
+        new_phone_number = '+595972157444'
+        r = self.client.post(
+            url,
+            json.dumps({'phone_number': new_phone_number}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {user_token.key}',
+        )
+        self.assertEqual(r.status_code, 200)
+
+        # Verify new phone_number
+        phone_token = PhoneToken.objects.filter(user=user).first()
+        url = reverse('radius:phone_token_validate', args=[self.default_org.slug])
+        r = self.client.post(
+            url,
+            json.dumps({'code': phone_token.token}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {user_token.key}',
+        )
+        self.assertEqual(r.status_code, 200)
+
+        user.refresh_from_db()
+        self.assertEqual(user.phone_number, new_phone_number)
+        self.assertEqual(user.username, new_phone_number)
 
 
 class TestIsSmsVerificationEnabled(ApiTokenMixin, BaseTestCase):
