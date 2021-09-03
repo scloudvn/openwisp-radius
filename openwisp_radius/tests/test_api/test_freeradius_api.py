@@ -132,16 +132,45 @@ class TestFreeradiusApi(AcctMixin, ApiTokenMixin, BaseTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data, {'control:Auth-Type': 'Accept'})
 
+    def _test_authorize_without_auth_helper(self, username, password):
+        r = self._authorize_user(username=username, password=password)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, {'control:Auth-Type': 'Accept'})
+
+    @capture_any_output()
     def test_authorize_with_user_auth(self):
+        user = self._create_user(
+            username='tester2',
+            email='tester2@gmail.com',
+            phone_number='+237675679232',
+            password='tester',
+        )
+
+        self._create_org_user(organization=self._get_org(), user=user)
+
+        with self.subTest('Test authorize with username'):
+            self._test_authorize_with_user_auth_helper(user.username, 'tester')
+
+        with self.subTest('Test authorize with email'):
+            self._test_authorize_with_user_auth_helper(user.email, 'tester')
+
+        with self.subTest('Test authorize with phone_number'):
+            self._test_authorize_with_user_auth_helper(user.phone_number, 'tester')
+
+        with self.subTest('Test authorization failure'):
+            r = self._authorize_user('thisuserdoesnotexist', 'tester', self.auth_header)
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.data, None)
+
+    @capture_any_output()
+    def test_authorize_without_user_auth(self):
         user = self._create_user(
             username='tester',
             email='tester@gmail.com',
             phone_number='+237675679231',
             password='tester',
         )
-
         self._create_org_user(organization=self._get_org(), user=user)
-
         with self.subTest('Test authorize with username'):
             self._test_authorize_with_user_auth_helper('tester', 'tester')
 
@@ -150,6 +179,17 @@ class TestFreeradiusApi(AcctMixin, ApiTokenMixin, BaseTestCase):
 
         with self.subTest('Test authorize with phone_number'):
             self._test_authorize_with_user_auth_helper('+237675679231', 'tester')
+
+        with self.subTest('Test authorization failure'):
+            r = self._authorize_user('thisuserdoesnotexist', 'tester')
+            self.assertEqual(r.status_code, 403)
+            self.assertEqual(
+                r.data['detail'],
+                (
+                    'Radius token does not exist. Obtain a new radius token or provide '
+                    'the organization UUID and API token.'
+                ),
+            )
 
     def test_authorize_user_with_email_as_username(self):
         user = self._create_user(
@@ -620,6 +660,53 @@ class TestFreeradiusApi(AcctMixin, ApiTokenMixin, BaseTestCase):
         ra.refresh_from_db()
         self.assertEqual(ra.update_time.timetuple(), now().timetuple())
         self.assertAcctData(ra, data)
+
+    @mock.patch.object(
+        app_settings,
+        'CALLED_STATION_IDS',
+        {
+            'test-org': {
+                'openvpn_config': [
+                    {'host': '127.0.0.1', 'port': 7505, 'password': 'somepassword'}
+                ],
+                'unconverted_ids': ['00-27-22-F3-FA-F1:hostname'],
+            }
+        },
+    )
+    @freeze_time(START_DATE)
+    def test_accounting_update_conversion_200(self):
+        self.assertEqual(RadiusAccounting.objects.count(), 0)
+        ra = self._create_radius_accounting(**self._acct_initial_data)
+
+        with self.subTest('should not overwrite back to unconverted ID'):
+            ra.called_station_id = '00-00-11-11-22-22'
+            ra.save()
+            data = self.acct_post_data
+            data['status_type'] = 'Interim-Update'
+            data = self._get_accounting_params(**data)
+            response = self.post_json(data)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, None)
+            self.assertEqual(RadiusAccounting.objects.count(), 1)
+            ra.refresh_from_db()
+            self.assertEqual(ra.called_station_id, '00-00-11-11-22-22')
+
+        with self.subTest('should overwrite if different called station ID'):
+            ra.called_station_id = '00-00-11-11-22-22'
+            ra.save()
+            data = self.acct_post_data
+            data['status_type'] = 'Interim-Update'
+            data = self._get_accounting_params(**data)
+            # this called station ID is not in the unconverted_ids list
+            # and simulates the situation in which the user roams
+            # to a different device and hence the called station ID can change
+            data['called_station_id'] = '00-00-22-22-33-33'
+            response = self.post_json(data)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, None)
+            self.assertEqual(RadiusAccounting.objects.count(), 1)
+            ra.refresh_from_db()
+            self.assertEqual(ra.called_station_id, '00-00-22-22-33-33')
 
     @freeze_time(START_DATE)
     @capture_any_output()
@@ -1187,7 +1274,7 @@ class TestClientIpApi(ApiTokenMixin, BaseTestCase):
         org = self._get_org()
         self.assertEqual(cache.get(f'ip-{org.pk}'), None)
         with self.subTest('Without Cache'):
-            authorize_and_asset(5, [])
+            authorize_and_asset(6, [])
         with self.subTest('With Cache'):
             authorize_and_asset(3, [])
         with self.subTest('Organization Settings Updated'):
@@ -1197,7 +1284,7 @@ class TestClientIpApi(ApiTokenMixin, BaseTestCase):
             authorize_and_asset(3, ['127.0.0.1', '192.0.2.0'])
         with self.subTest('Cache Deleted'):
             cache.clear()
-            authorize_and_asset(5, ['127.0.0.1', '192.0.2.0'])
+            authorize_and_asset(6, ['127.0.0.1', '192.0.2.0'])
 
     def test_ip_from_setting_valid(self):
         response = self.client.post(reverse('radius:authorize'), self.params)
