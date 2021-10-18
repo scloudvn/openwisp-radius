@@ -3,7 +3,7 @@ import ipaddress
 import json
 import logging
 import os
-from base64 import encodestring
+from base64 import encodebytes
 from datetime import timedelta
 from hashlib import md5, sha1
 from io import StringIO
@@ -242,7 +242,7 @@ def _encode_secret(attribute, new_value=None):
         salt = urandom(4)
         hash = md5(new_value.encode('utf-8'))
         hash.update(salt)
-        hash_encoded = encodestring(hash.digest() + salt)
+        hash_encoded = encodebytes(hash.digest() + salt)
         attribute_value = hash_encoded.decode('utf-8')[:-1]
     elif attribute == 'SHA-Password':
         attribute_value = sha1(new_value.encode('utf-8')).hexdigest()
@@ -250,7 +250,7 @@ def _encode_secret(attribute, new_value=None):
         salt = urandom(4)
         hash = sha1(new_value.encode('utf-8'))
         hash.update(salt)
-        hash_encoded = encodestring(hash.digest() + salt)
+        hash_encoded = encodebytes(hash.digest() + salt)
         attribute_value = hash_encoded.decode('utf-8')[:-1]
     elif attribute == 'Crypt-Password':
         attribute_value = sha512_crypt.hash(new_value)
@@ -1139,6 +1139,11 @@ class AbstractOrganizationRadiusSettings(UUIDModel):
             mobile_prefixes = self.allowed_mobile_prefixes.split(',')
         return mobile_prefixes
 
+    def get_registration_enabled(self):
+        if self.registration_enabled is None:
+            return app_settings.REGISTRATION_API_ENABLED
+        return self.registration_enabled
+
     def clean(self):
         if self.sms_verification and not self.sms_sender:
             raise ValidationError(
@@ -1289,7 +1294,7 @@ class AbstractPhoneToken(TimeStampedEditableModel):
                 )
             )
             raise ValidationError(
-                _('Maximum daily limit reached from this ip address.')
+                _('Maximum daily limit reached from this IP address.')
             )
 
     def save(self, *args, **kwargs):
@@ -1334,7 +1339,7 @@ class AbstractPhoneToken(TimeStampedEditableModel):
             if self.user.registered_user.is_verified:
                 logger.warning(f'User {self.user.pk} is already verified')
                 raise exceptions.UserAlreadyVerified(
-                    _('This user is already verified.')
+                    _('This user has been already verified.')
                 )
         except ObjectDoesNotExist:
             pass
@@ -1347,11 +1352,7 @@ class AbstractPhoneToken(TimeStampedEditableModel):
                 f'attempt limit for token {self.pk}.'
             )
             raise exceptions.MaxAttemptsException(
-                _(
-                    'Maximum number of allowed attempts reached '
-                    'for this verification code, please send a '
-                    'new code and try again.'
-                )
+                _('Maximum number of attempts reached, request a new code.')
             )
         if timezone.now() > self.valid_until:
             logger.warning(

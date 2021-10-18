@@ -75,6 +75,20 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn('phone_number', r.data)
 
+        with self.subTest('phone_number missing entirely'):
+            r = self.client.post(
+                url,
+                {
+                    'username': self._test_email,
+                    'email': self._test_email,
+                    'password1': 'password',
+                    'password2': 'password',
+                    'method': 'mobile_phone',
+                },
+            )
+            self.assertEqual(r.status_code, 400)
+            self.assertIn('phone_number', r.data)
+
     def test_register_400_duplicate_phone_number(self):
         self._register_user()
         url = reverse('radius:rest_register', args=[self.default_org.slug])
@@ -148,7 +162,7 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
         url = reverse('radius:phone_token_create', args=[self.default_org.slug])
         r = self.client.post(url, HTTP_AUTHORIZATION=f'Bearer {token.key}')
         self.assertEqual(r.status_code, 400)
-        self.assertEqual(r.json(), {'user': 'This user is already verified.'})
+        self.assertEqual(r.json(), {'user': 'This user has been already verified.'})
 
     @freeze_time(_TEST_DATE)
     @capture_any_output()
@@ -268,7 +282,7 @@ class TestPhoneVerification(ApiTokenMixin, BaseTestCase):
             if n > max_value:
                 self.assertIn('non_field_errors', r.data)
                 self.assertIn(
-                    'Maximum number of allowed attempts',
+                    'Maximum number of attempts reached',
                     str(r.data['non_field_errors']),
                 )
         user.refresh_from_db()

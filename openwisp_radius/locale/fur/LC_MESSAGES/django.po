@@ -11,7 +11,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-
 #: openwisp_radius/api/serializers.py:71
 msgid ""
 "The credentials entered are not valid. Please double-check and try again."
@@ -21,18 +20,6 @@ msgstr ""
 #: openwisp_radius/api/serializers.py:74
 msgid "Must include \"username\" and \"password\"."
 msgstr "Deve includere \"nome utente\" e \"password\"."
-
-#: openwisp_radius/api/serializers.py:332
-msgid ""
-"Required only when the organization has enabled SMS verification in its "
-"\"Organization RADIUS Settings.\""
-msgstr ""
-
-#: openwisp_radius/api/serializers.py:344
-msgid ""
-"Required only when the organization has mandatory identity verification in "
-"its \"Organization RADIUS Settings.\""
-msgstr ""
 
 #: openwisp_radius/api/serializers.py:355
 #: openwisp_radius/api/serializers.py:383
@@ -76,7 +63,7 @@ msgid "Maximum daily limit reached."
 msgstr "Limite giornaliero massimo raggiunto."
 
 #: openwisp_radius/base/models.py:1292
-msgid "Maximum daily limit reached from this ip address."
+msgid "Maximum daily limit reached from this IP address."
 msgstr "Limite giornaliero massimo raggiunto da questo indirizzo IP."
 
 #: openwisp_radius/base/models.py:1307
@@ -91,27 +78,19 @@ msgstr ""
 "Codice di verifica {organization}: {code}"
 
 #: openwisp_radius/base/models.py:1335
-msgid "This user is already verified."
+msgid "This user has been already verified."
 msgstr "Questo utente è giá verificato."
 
 #: openwisp_radius/base/models.py:1350
-msgid ""
-"Maximum number of allowed attempts reached for this verification code, "
-"please send a new code and try again."
+msgid "Maximum number of attempts reached, request a new code."
 msgstr ""
-"Numero massimo di tentativi consentiti raggiunto per questo codice di "
-"verifica, invia un nuovo codice e riprova."
+"Numero massimo di tentativi consentiti raggiunto, richiedi l'invio di un nuovo "
+"codice."
 
 #: openwisp_radius/base/models.py:1364
 msgid ""
 "This verification code has expired, Please send a new code and try again."
 msgstr "Questo codice di verifica è scaduto. Invia un nuovo codice e riprova."
-
-#: openwisp_radius/base/models.py:1381
-msgid ""
-"users can sign up in different ways, some methods are valid as indirect "
-"identity verification (eg: mobile phone SIM card in most countries)"
-msgstr ""
 
 #: openwisp_radius/templates/custom_password_reset_email.html:2
 #, python-format

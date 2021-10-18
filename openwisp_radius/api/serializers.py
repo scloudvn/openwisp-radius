@@ -14,6 +14,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -22,7 +23,9 @@ from rest_framework import serializers
 from rest_framework.authtoken.serializers import (
     AuthTokenSerializer as BaseAuthTokenSerializer,
 )
+from rest_framework.fields import empty
 
+from openwisp_radius.api.exceptions import CrossOrgRegistrationException
 from openwisp_users.backends import UsersAuthenticationBackend
 
 from .. import settings as app_settings
@@ -187,14 +190,22 @@ class RadiusAccountingSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        if app_settings.API_ACCOUNTING_AUTO_GROUP:
-            username = validated_data.get('username', '')
+        username = validated_data.get('username', '')
+        calling_station_id = validated_data.get('calling_station_id', '')
+        if app_settings.API_ACCOUNTING_AUTO_GROUP and username != calling_station_id:
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
                 logging.warning(f'No corresponding user found for username: {username}')
             else:
-                group = user.radiususergroup_set.order_by('priority').first()
+                organization_uuid = self.context.get('request').auth
+                group = (
+                    user.radiususergroup_set.filter(
+                        group__organization__pk=organization_uuid
+                    )
+                    .order_by('priority')
+                    .first()
+                )
                 groupname = group.groupname if group else None
                 validated_data.update(groupname=groupname)
         return super().create(validated_data)
@@ -412,6 +423,59 @@ class RegisterSerializer(
         if field_setting == 'disabled':
             field_value = ''
         return field_value
+
+    def validate_cross_org_registration(self, error, data):
+        error_dict = error.detail
+        if (
+            'username' not in error_dict
+            and 'email' not in error_dict
+            and 'phone_number' not in error_dict
+        ):
+            raise error
+
+        def has_key(key):
+            return key in error_dict and key in data
+
+        user_lookup = Q()
+        if has_key('username'):
+            user_lookup |= Q(username=data['username'])
+        if has_key('email'):
+            user_lookup |= Q(email=data['email'])
+        if has_key('phone_number'):
+            user_lookup |= Q(phone_number=data['phone_number'])
+        try:
+            user = User.objects.get(user_lookup)
+        except User.DoesNotExist:
+            # Error is not related to cross organization registration
+            raise error
+        if OrganizationUser.objects.filter(
+            organization=self.context['view'].organization, user=user,
+        ).exists():
+            # User is registering to the organization it is already member of.
+            raise error
+
+        organizations = (
+            OrganizationUser.objects.filter(user=user)
+            .select_related('organization')
+            .values('organization__name', 'organization__slug')
+        )
+        organization_list = []
+        for org in organizations:
+            organization_list.append(
+                {'slug': org['organization__slug'], 'name': org['organization__name']}
+            )
+        raise CrossOrgRegistrationException(
+            {
+                'details': _('A user like the one being registered already exists.'),
+                'organizations': organization_list,
+            },
+        )
+
+    def run_validation(self, data=empty):
+        try:
+            return super().run_validation(data=data)
+        except serializers.ValidationError as error:
+            self.validate_cross_org_registration(error, data)
 
     def save(self, request):
         adapter = get_adapter()

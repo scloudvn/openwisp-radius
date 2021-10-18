@@ -23,22 +23,6 @@ msgstr ""
 msgid "Must include \"username\" and \"password\"."
 msgstr "Mora vključevati \"uporabniško ime\" in \"geslo\"."
 
-#: openwisp_radius/api/serializers.py:332
-msgid ""
-"Required only when the organization has enabled SMS verification in its "
-"\"Organization RADIUS Settings.\""
-msgstr ""
-"Zahtevano samo, če je organizacija omogočila preverjanje SMS v svojem"
-"\"Nastavitve RADIUS organizacije.\""
-
-#: openwisp_radius/api/serializers.py:344
-msgid ""
-"Required only when the organization has mandatory identity verification in "
-"its \"Organization RADIUS Settings.\""
-msgstr ""
-"Potrebno le, če ima organizacija obvezno preverjanje identitete v"
-"its \"Nastavitve RADIUS -a organizacije.\""
-
 #: openwisp_radius/api/serializers.py:355
 #: openwisp_radius/api/serializers.py:383
 msgid "This field is required."
@@ -81,7 +65,7 @@ msgid "Maximum daily limit reached."
 msgstr "Največja dnevna meja je dosežena."
 
 #: openwisp_radius/base/models.py:1292
-msgid "Maximum daily limit reached from this ip address."
+msgid "Maximum daily limit reached from this IP address."
 msgstr "Največja dnevna omejitev, dosežena s tega naslova IP."
 
 #: openwisp_radius/base/models.py:1307
@@ -95,16 +79,12 @@ msgid "{organization} verification code: {code}"
 msgstr "{organization} koda za preverjanje: {code}"
 
 #: openwisp_radius/base/models.py:1335
-msgid "This user is already verified."
+msgid "This user has been already verified."
 msgstr "Ta uporabnik je že preverjen."
 
 #: openwisp_radius/base/models.py:1350
-msgid ""
-"Maximum number of allowed attempts reached for this verification code, "
-"please send a new code and try again."
-msgstr ""
-"Največje dovoljeno število poskusov za to kodo za preverjanje,"
-"pošljite novo kodo in poskusite znova."
+msgid "Maximum number of attempts reached, request a new code."
+msgstr "Največje število doseženih poskusov, zahtevajte novo kodo."
 
 #: openwisp_radius/base/models.py:1364
 msgid ""
