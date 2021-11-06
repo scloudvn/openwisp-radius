@@ -182,6 +182,8 @@ class RadiusAccountingSerializer(serializers.ModelSerializer):
         status_type = data.pop('status_type')
         if status_type == 'Interim-Update':
             data['update_time'] = time
+            data['stop_time'] = None
+            data['terminate_cause'] = ''
         if status_type == 'Stop':
             data['update_time'] = time
             data['stop_time'] = time
@@ -246,6 +248,7 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = '__all__'
+        ref_name = 'radius_user_group_serializer'
 
 
 class UserSerializer(serializers.ModelSerializer):

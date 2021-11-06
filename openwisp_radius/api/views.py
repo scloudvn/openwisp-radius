@@ -5,7 +5,6 @@ from allauth.account.forms import default_token_generator
 from allauth.account.utils import url_str_to_user_pk, user_pk_to_url_str
 from dj_rest_auth import app_settings as rest_auth_settings
 from dj_rest_auth.registration.views import RegisterView as BaseRegisterView
-from dj_rest_auth.views import PasswordChangeView as BasePasswordChangeView
 from dj_rest_auth.views import PasswordResetConfirmView as BasePasswordResetConfirmView
 from dj_rest_auth.views import PasswordResetView as BasePasswordResetView
 from django.contrib.auth import get_user_model
@@ -43,6 +42,7 @@ from rest_framework.throttling import BaseThrottle  # get_ident method
 from openwisp_radius.api.serializers import RadiusUserSerializer
 from openwisp_users.api.authentication import BearerAuthentication
 from openwisp_users.api.permissions import IsOrganizationManager
+from openwisp_users.api.views import ChangePasswordView as BasePasswordChangeView
 
 from .. import settings as app_settings
 from ..exceptions import PhoneTokenException, UserAlreadyVerified
@@ -76,6 +76,7 @@ RadiusAccounting = load_model('RadiusAccounting')
 RadiusToken = load_model('RadiusToken')
 RadiusBatch = load_model('RadiusBatch')
 OrganizationRadiusSettings = load_model('OrganizationRadiusSettings')
+RegisteredUser = load_model('RegisteredUser')
 
 
 class ThrottledAPIMixin(object):
@@ -284,7 +285,7 @@ class ObtainAuthTokenView(
         # If identity verification is required, check if user is verified
         if self._needs_identity_verification(
             {'slug': kwargs['slug']}
-        ) and not self._is_user_verified(user):
+        ) and not self.is_identity_verified_strong(user):
             status_code = 401
         return Response(response, status=status_code)
 
@@ -296,6 +297,10 @@ class ObtainAuthTokenView(
     def validate_membership(self, user):
         if not (user.is_superuser or user.is_member(self.organization)):
             if is_registration_enabled(self.organization):
+                if self._needs_identity_verification(
+                    org=self.organization
+                ) and not self.is_identity_verified_strong(user):
+                    raise PermissionDenied
                 try:
                     org_user = OrganizationUser(
                         user=user, organization=self.organization
@@ -348,7 +353,7 @@ class ValidateAuthTokenView(
                 )
                 # user may be in the process of changing the phone number
                 # in that case show the new phone number (which is not verified yet)
-                if not self._is_user_verified(user):
+                if not self.is_identity_verified_strong(user):
                     phone_token = (
                         PhoneToken.objects.filter(user=user)
                         .order_by('-created')
@@ -419,6 +424,12 @@ user_accounting = UserAccountingView.as_view()
 class PasswordChangeView(ThrottledAPIMixin, DispatchOrgMixin, BasePasswordChangeView):
     authentication_classes = (BearerAuthentication,)
 
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def get_object(self):
+        return self.request.user
+
     @swagger_auto_schema(responses={200: '`{"detail":"New password has been saved."}`'})
     def post(self, request, *args, **kwargs):
         """
@@ -427,7 +438,7 @@ class PasswordChangeView(ThrottledAPIMixin, DispatchOrgMixin, BasePasswordChange
         the `Reset password` endpoint.
         """
         self.validate_membership(request.user)
-        return super().post(request, *args, **kwargs)
+        return super().update(request, *args, **kwargs)
 
 
 password_change = PasswordChangeView.as_view()
